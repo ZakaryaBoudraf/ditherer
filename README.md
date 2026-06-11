@@ -1,9 +1,8 @@
-# Dither Boy — local edition
+# Ditherer
 
-A self-contained, **in-browser** dithering studio inspired by
-[Studio AAA's Dither Boy](https://studioaaa.com/product/dither-boy/).
-Upload an image, tweak the dither, download a PNG. Everything runs locally —
-your images never leave your machine and there is no install or build step.
+A self-contained, **in-browser** dithering studio. Upload an image or a video,
+tweak the dither, download the result. Everything runs locally — your files
+never leave your machine and there is no install, build step, or dependency.
 
 ## Run it
 
@@ -14,7 +13,7 @@ your images never leave your machine and there is no install or build step.
 browsers and avoids any local-file quirks):
 
 ```bash
-# from inside the ditherboy/ folder
+# from inside the project folder
 python -m http.server 8000
 # then open http://localhost:8000
 ```
@@ -41,8 +40,9 @@ video alike — all exports included.
 **Color**
 - Black & White (1-bit) with custom ink/paper colors
 - Grayscale / Duotone with an adjustable number of levels (2–32) and tinting
-- Color palettes: Game Boy, Game Boy Pocket, CGA, Commodore 64, PICO-8,
-  ZX Spectrum, CMYK, Sepia, and more
+- Retro hardware palettes: NES (8-bit, 56 colors), EGA/VGA 16, CGA (×2),
+  Game Boy & Game Boy Pocket, Apple II hi-res, MSX (TMS9918), Amstrad CPC (27),
+  ZX Spectrum, Commodore 64, Amiga Workbench, PICO-8, CMYK, Sepia
 - Build a **custom palette** by hand, or **extract** a palette from the image
   (median-cut, 2–32 colors)
 
@@ -50,7 +50,8 @@ video alike — all exports included.
 saturation, hue shift, invert.
 
 **Controls** — resolution / pixelation, dither amount (error scale / threshold
-spread), serpentine scan, halftone dot size.
+spread), serpentine scan, halftone dot size. Every dial has an **editable
+number box** — type an exact value or drag the slider.
 
 **Post effects** — scanlines, noise, chromatic aberration.
 
@@ -91,12 +92,9 @@ scratch, no libraries).
 | `codec.js`   | animated GIF encoder/decoder, ZIP writer, MP4 muxer (all from scratch) |
 | `app.js`     | UI wiring & render pipeline |
 
-## Notes & differences from the original
+## Notes
 
-This is a homage, not a clone. The commercial Dither Boy additionally offers a
-timeline editor with keyframes, a much larger effect library (~63), stackable
-reorderable effect layers, and vector/embroidery export — those are out of scope
-here. Video in/out is supported: live dithered playback plus MP4, WebM and GIF
-export. MP4 comes out silent (browsers don't expose an AAC encoder reliably);
-pick WebM when you need the soundtrack. Everything above is implemented from
-scratch in vanilla JS on the Canvas API.
+Everything is implemented from scratch in vanilla JS on the Canvas API — no
+libraries, no build step. Video in/out is supported: live dithered playback
+plus MP4, WebM and GIF export. MP4 comes out silent (browsers don't expose an
+AAC encoder reliably); pick WebM when you need the soundtrack.

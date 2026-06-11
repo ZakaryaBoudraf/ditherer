@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dither Boy — local</title>
-  <link rel="stylesheet" href="style.css?v=4" />
+  <title>Ditherer — local</title>
+  <link rel="stylesheet" href="style.css?v=5" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%230b0b0d'/><g fill='%2300e08a'><rect x='1' y='1' width='2' height='2'/><rect x='5' y='1' width='2' height='2'/><rect x='9' y='1' width='2' height='2'/><rect x='13' y='1' width='2' height='2'/><rect x='3' y='3' width='2' height='2'/><rect x='7' y='3' width='2' height='2'/><rect x='11' y='3' width='2' height='2'/><rect x='1' y='5' width='2' height='2'/><rect x='9' y='5' width='2' height='2'/><rect x='5' y='7' width='2' height='2'/><rect x='13' y='7' width='2' height='2'/></g></svg>" />
 </head>
 <body>
@@ -14,7 +14,7 @@
       <header class="brand">
         <div class="logo" aria-hidden="true"></div>
         <div>
-          <h1>Dither&nbsp;Boy</h1>
+          <h1>Ditherer</h1>
           <span class="tag">local edition</span>
         </div>
       </header>
@@ -55,12 +55,12 @@
           </select>
         </div>
         <div class="control">
-          <label for="straighten">Straighten <output id="straightenOut"></output></label>
+          <label for="straighten">Straighten (°) <input type="number" class="num" id="straightenOut" /></label>
           <input type="range" id="straighten" min="-45" max="45" step="0.1" value="0" />
           <p class="hint">Auto-fits the crop — no blank corners.</p>
         </div>
         <div class="control">
-          <label for="cropZoom">Zoom / reframe <output id="cropZoomOut"></output></label>
+          <label for="cropZoom">Zoom / reframe (×) <input type="number" class="num" id="cropZoomOut" /></label>
           <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" />
           <p class="hint">Past 1×, drag the preview to reframe.</p>
         </div>
@@ -75,7 +75,7 @@
       <section class="panel">
         <h2>Pixelation</h2>
         <div class="control">
-          <label for="resolution">Resolution <output id="resolutionOut"></output></label>
+          <label for="resolution">Resolution <input type="number" class="num" id="resolutionOut" /></label>
           <input type="range" id="resolution" min="32" max="1400" step="2" value="500" />
           <p class="hint">Lower = chunkier pixels &amp; faster.</p>
         </div>
@@ -85,23 +85,23 @@
       <section class="panel">
         <h2>Adjustments</h2>
         <div class="control">
-          <label for="brightness">Brightness <output id="brightnessOut"></output></label>
+          <label for="brightness">Brightness <input type="number" class="num" id="brightnessOut" /></label>
           <input type="range" id="brightness" min="-100" max="100" step="1" value="0" />
         </div>
         <div class="control">
-          <label for="contrast">Contrast <output id="contrastOut"></output></label>
+          <label for="contrast">Contrast <input type="number" class="num" id="contrastOut" /></label>
           <input type="range" id="contrast" min="-100" max="100" step="1" value="0" />
         </div>
         <div class="control">
-          <label for="midtones">Midtones <output id="midtonesOut"></output></label>
+          <label for="midtones">Midtones <input type="number" class="num" id="midtonesOut" /></label>
           <input type="range" id="midtones" min="-100" max="100" step="1" value="0" />
         </div>
         <div class="control">
-          <label for="saturation">Saturation <output id="saturationOut"></output></label>
+          <label for="saturation">Saturation <input type="number" class="num" id="saturationOut" /></label>
           <input type="range" id="saturation" min="-100" max="100" step="1" value="0" />
         </div>
         <div class="control">
-          <label for="hue">Hue shift <output id="hueOut"></output></label>
+          <label for="hue">Hue shift <input type="number" class="num" id="hueOut" /></label>
           <input type="range" id="hue" min="-180" max="180" step="1" value="0" />
         </div>
         <label class="check"><input type="checkbox" id="invert" /> Invert</label>
@@ -115,11 +115,11 @@
           <select id="algorithm"></select>
         </div>
         <div class="control" id="amountWrap">
-          <label for="amount">Dither amount <output id="amountOut"></output></label>
+          <label for="amount">Dither amount <input type="number" class="num" id="amountOut" /></label>
           <input type="range" id="amount" min="0" max="150" step="1" value="100" />
         </div>
         <div class="control" id="halftoneWrap" hidden>
-          <label for="halftoneSize">Dot size <output id="halftoneSizeOut"></output></label>
+          <label for="halftoneSize">Dot size <input type="number" class="num" id="halftoneSizeOut" /></label>
           <input type="range" id="halftoneSize" min="2" max="24" step="1" value="6" />
         </div>
         <label class="check" id="serpentineWrap">
@@ -140,7 +140,7 @@
         </div>
 
         <div class="control" id="levelsWrap">
-          <label for="levels">Levels <output id="levelsOut"></output></label>
+          <label for="levels">Levels <input type="number" class="num" id="levelsOut" /></label>
           <input type="range" id="levels" min="2" max="32" step="1" value="2" />
         </div>
 
@@ -168,7 +168,7 @@
             </div>
           </div>
           <div class="control">
-            <label for="extractCount">Extract from image <output id="extractCountOut"></output></label>
+            <label for="extractCount">Extract from image <input type="number" class="num" id="extractCountOut" /></label>
             <input type="range" id="extractCount" min="2" max="32" step="1" value="8" />
             <button id="extractBtn" class="btn small">Extract palette</button>
           </div>
@@ -179,15 +179,15 @@
       <section class="panel">
         <h2>Post effects</h2>
         <div class="control">
-          <label for="scanlines">Scanlines <output id="scanlinesOut"></output></label>
+          <label for="scanlines">Scanlines <input type="number" class="num" id="scanlinesOut" /></label>
           <input type="range" id="scanlines" min="0" max="100" step="1" value="0" />
         </div>
         <div class="control">
-          <label for="noise">Noise <output id="noiseOut"></output></label>
+          <label for="noise">Noise <input type="number" class="num" id="noiseOut" /></label>
           <input type="range" id="noise" min="0" max="100" step="1" value="0" />
         </div>
         <div class="control">
-          <label for="chroma">Chromatic aberration <output id="chromaOut"></output></label>
+          <label for="chroma">Chromatic aberration <input type="number" class="num" id="chromaOut" /></label>
           <input type="range" id="chroma" min="0" max="12" step="1" value="0" />
         </div>
       </section>
@@ -197,11 +197,11 @@
         <h2>Animation / GIF</h2>
         <p id="gifInfo" class="hint">No image loaded.</p>
         <div class="control" id="shimmerFramesWrap">
-          <label for="animFrames">Frames (still → GIF) <output id="animFramesOut"></output></label>
+          <label for="animFrames">Frames (still → GIF) <input type="number" class="num" id="animFramesOut" /></label>
           <input type="range" id="animFrames" min="2" max="60" step="1" value="12" />
         </div>
         <div class="control">
-          <label for="animFps">Speed <output id="animFpsOut"></output> fps</label>
+          <label for="animFps">Speed (fps) <input type="number" class="num" id="animFpsOut" /></label>
           <input type="range" id="animFps" min="2" max="30" step="1" value="12" />
         </div>
         <button id="exportGifBtn" class="btn primary" disabled>Export animated GIF</button>
@@ -269,9 +269,8 @@
       </section>
 
       <footer class="credit">
-        <p>A local, in-browser homage to
-          <a href="https://studioaaa.com/product/dither-boy/" target="_blank" rel="noopener">Studio AAA's Dither Boy</a>.
-          Images never leave your machine.</p>
+        <p>Runs entirely in your browser — images and videos never leave your
+        machine. No uploads, no tracking, no dependencies.</p>
       </footer>
     </aside>
 
@@ -293,8 +292,8 @@
     </main>
   </div>
 
-  <script src="dither.js?v=4"></script>
-  <script src="codec.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="dither.js?v=5"></script>
+  <script src="codec.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

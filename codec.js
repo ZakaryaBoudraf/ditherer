@@ -1,5 +1,5 @@
 /* ============================================================================
-   Dither Boy (local) — codecs: animated GIF (encode + decode) and ZIP (store).
+   Ditherer — codecs: animated GIF (encode + decode), ZIP (store), MP4 mux.
    Pure client-side, no dependencies. Exposes a global `Codec` object.
    GIF LZW encode/decode growth rules are matched (validated by round-trip).
    ========================================================================== */

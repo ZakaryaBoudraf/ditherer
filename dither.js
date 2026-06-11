@@ -1,5 +1,5 @@
 /* ============================================================================
-   Dither Boy (local) — image processing engine
+   Ditherer — image processing engine
    Pure client-side. Exposes a global `Dither` object.
    ========================================================================== */
 (function (global) {

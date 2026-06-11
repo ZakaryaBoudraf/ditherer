@@ -1,5 +1,5 @@
 /* ============================================================================
-   Dither Boy (local) — UI + pipeline orchestration
+   Ditherer — UI + pipeline orchestration
    ========================================================================== */
 (function () {
   'use strict';
@@ -26,28 +26,51 @@
   const MAX_GIF_FRAMES = 200; // cap for video → GIF sampling
 
   /* ---------- preset palettes ------------------------------------------- */
+  // "AABBCC DDEEFF …" → [[r,g,b], …]
+  const HEX = (str) => str.trim().split(/\s+/).map((h) =>
+    [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]);
+
   const PALETTES = {
-    'bw': { name: 'Black & White', colors: [[0, 0, 0], [255, 255, 255]] },
-    'gameboy': { name: 'Game Boy (DMG)', colors: [[15, 56, 15], [48, 98, 48], [139, 172, 15], [155, 188, 15]] },
-    'gameboy-pocket': { name: 'Game Boy Pocket', colors: [[8, 24, 32], [52, 104, 86], [136, 192, 112], [224, 248, 208]] },
-    'cga': { name: 'CGA (cyan/magenta)', colors: [[0, 0, 0], [85, 255, 255], [255, 85, 255], [255, 255, 255]] },
-    'cga-yellow': { name: 'CGA (red/green/yellow)', colors: [[0, 0, 0], [85, 255, 85], [255, 85, 85], [255, 255, 85]] },
-    'sepia': { name: 'Sepia', colors: [[44, 25, 16], [108, 67, 44], [173, 122, 79], [232, 197, 152], [255, 245, 222]] },
+    'bw': { name: 'Black & White', colors: HEX('000000 FFFFFF') },
+    'gameboy': { name: 'Game Boy (DMG)', colors: HEX('0F380F 306230 8BAC0F 9BBC0F') },
+    'gameboy-pocket': { name: 'Game Boy Pocket', colors: HEX('081820 346856 88C070 E0F8D0') },
+    'nes': {
+      name: 'NES (8-bit)',
+      colors: HEX(
+        '7C7C7C 0000FC 0000BC 4428BC 940084 A80020 A81000 881400 503000 007800 006800 005800 004058 000000 ' +
+        'BCBCBC 0078F8 0058F8 6844FC D800CC E40058 F83800 E45C10 AC7C00 00B800 00A800 00A844 008888 080808 ' +
+        'F8F8F8 3CBCFC 6888FC 9878F8 F878F8 F85898 F87858 FCA044 F8B800 B8F818 58D854 58F898 00E8D8 787878 ' +
+        'FCFCFC A4E4FC B8B8F8 D8B8F8 F8B8F8 F8A4C0 F0D0B0 FCE0A8 F8D878 D8F878 B8F8B8 B8F8D8 00FCFC F8D8F8'),
+    },
+    'ega': {
+      name: 'EGA / VGA 16 (8-bit PC)',
+      colors: HEX('000000 0000AA 00AA00 00AAAA AA0000 AA00AA AA5500 AAAAAA 555555 5555FF 55FF55 55FFFF FF5555 FF55FF FFFF55 FFFFFF'),
+    },
+    'cga': { name: 'CGA (cyan/magenta)', colors: HEX('000000 55FFFF FF55FF FFFFFF') },
+    'cga-yellow': { name: 'CGA (red/green/yellow)', colors: HEX('000000 55FF55 FF5555 FFFF55') },
+    'apple2': { name: 'Apple II hi-res', colors: HEX('000000 14F53C FF44FD FF6A3C 14CFFD FFFFFF') },
+    'msx': {
+      name: 'MSX (TMS9918)',
+      colors: HEX('000000 3EB849 74D07D 5955E0 8076F1 B95E51 65DBEF DB6559 FF897D CCC35E DED087 3AA241 B766B5 CCCCCC FFFFFF'),
+    },
+    'cpc': { name: 'Amstrad CPC (27)', colors: [] }, // filled below
+    'zx': { name: 'ZX Spectrum', colors: HEX('000000 0000D7 D70000 D700D7 00D700 00D7D7 D7D700 FFFFFF') },
     'c64': {
       name: 'Commodore 64',
-      colors: [[0, 0, 0], [255, 255, 255], [136, 57, 50], [103, 182, 189], [139, 63, 150], [85, 160, 73],
-               [64, 49, 141], [191, 206, 114], [139, 84, 41], [87, 66, 0], [184, 105, 98], [80, 80, 80],
-               [120, 120, 120], [148, 224, 137], [120, 105, 196], [159, 159, 159]],
+      colors: HEX('000000 FFFFFF 883932 67B6BD 8B3F96 55A049 40318D BFCE72 8B5429 574200 B86962 505050 787878 94E089 7869C4 9F9F9F'),
     },
+    'amiga-wb': { name: 'Amiga Workbench (16-bit)', colors: HEX('0055AA FFFFFF 000000 FF8800') },
     'pico8': {
       name: 'PICO-8',
-      colors: [[0, 0, 0], [29, 43, 83], [126, 37, 83], [0, 135, 81], [171, 82, 54], [95, 87, 79],
-               [194, 195, 199], [255, 241, 232], [255, 0, 77], [255, 163, 0], [255, 236, 39], [0, 228, 54],
-               [41, 173, 255], [131, 118, 156], [255, 119, 168], [255, 204, 170]],
+      colors: HEX('000000 1D2B53 7E2553 008751 AB5236 5F574F C2C3C7 FFF1E8 FF004D FFA300 FFEC27 00E436 29ADFF 83769C FF77A8 FFCCAA'),
     },
-    'zx': { name: 'ZX Spectrum-ish', colors: [[0,0,0],[0,0,215],[215,0,0],[215,0,215],[0,215,0],[0,215,215],[215,215,0],[255,255,255]] },
-    'cmyk': { name: 'CMYK', colors: [[0,0,0],[0,174,239],[236,0,140],[255,242,0],[255,255,255]] },
+    'cmyk': { name: 'CMYK', colors: HEX('000000 00AEEF EC008C FFF200 FFFFFF') },
+    'sepia': { name: 'Sepia', colors: HEX('2C1910 6C432C AD7A4F E8C598 FFF5DE') },
   };
+  // Amstrad CPC: all 27 combinations of three RGB levels
+  for (const r of [0, 128, 255]) for (const g of [0, 128, 255]) for (const b of [0, 128, 255]) {
+    PALETTES.cpc.colors.push([r, g, b]);
+  }
 
   /* ---------- state ----------------------------------------------------- */
   const state = {
@@ -70,6 +93,7 @@
   const SLIDERS = ['resolution', 'brightness', 'contrast', 'midtones', 'saturation', 'hue',
                    'amount', 'halftoneSize', 'levels', 'extractCount', 'scanlines', 'noise', 'chroma',
                    'animFrames', 'animFps'];
+  const ALL_DIALS = SLIDERS.concat(['straighten', 'cropZoom']);
 
   const hexToRgb = (hex) => {
     const h = hex.replace('#', '');
@@ -813,9 +837,11 @@
   }
 
   function syncOutputs() {
-    SLIDERS.forEach((id) => { const el = $(id), out = $(id + 'Out'); if (el && out) out.textContent = el.value; });
-    $('straightenOut').textContent = (+$('straighten').value).toFixed(1) + '°';
-    $('cropZoomOut').textContent = (+$('cropZoom').value).toFixed(2) + '×';
+    ALL_DIALS.forEach((id) => {
+      const el = $(id), out = $(id + 'Out');
+      // don't fight the user while they're typing in the number box
+      if (el && out && document.activeElement !== out) out.value = el.value;
+    });
   }
 
   /* ---------- reset / randomize ----------------------------------------- */
@@ -863,6 +889,21 @@
     document.querySelectorAll('input, select').forEach((el) => {
       const evt = el.type === 'range' ? 'input' : 'change';
       el.addEventListener(evt, () => { syncOutputs(); updateVisibility(); refreshGifInfo(); schedule(); });
+    });
+
+    // number boxes ↔ sliders: type a value to set any dial precisely
+    ALL_DIALS.forEach((id) => {
+      const slider = $(id), num = $(id + 'Out');
+      if (!slider || !num) return;
+      num.min = slider.min; num.max = slider.max; num.step = slider.step || 'any';
+      num.value = slider.value;
+      num.addEventListener('input', () => {
+        const v = parseFloat(num.value);
+        if (!isFinite(v)) return;
+        slider.value = v;                  // browser clamps to the slider's range
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      num.addEventListener('change', () => { num.value = slider.value; }); // snap on blur
     });
 
     // upload via drop zone
