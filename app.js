@@ -59,6 +59,8 @@
     batch: [],            // queued File objects for batch processing
     customColors: ['#1a1c2c', '#5d275d', '#b13e53', '#ef7d57', '#ffcd75', '#a7f070', '#38b764', '#257179'],
     lastOutput: null,     // { w, h } of the last preview render
+    // crop & straighten: angle in degrees, rot in quarter turns, ox/oy pan [0..1]
+    transform: { angle: 0, rot: 0, ratio: 'free', zoom: 1, ox: 0.5, oy: 0.5 },
   };
 
   const DEFAULTS = {
@@ -140,19 +142,71 @@
     return [Math.max(1, Math.round(sw * scale)), Math.max(1, Math.round(sh * scale))];
   };
 
+  const parseRatio = (str) => {
+    const m = String(str).split(':');
+    return (+m[0]) / (+m[1]);
+  };
+
+  // Crop/straighten geometry. The crop is the largest axis-aligned rectangle of
+  // the target aspect inscribed in the rotated source (so straightening never
+  // exposes blank corners), shrunk by zoom and panned by ox/oy within the slack.
+  // Returns null when the whole transform is a no-op.
+  function cropParams(sw, sh) {
+    const t = state.transform;
+    const quarter = ((t.rot % 4) + 4) % 4;
+    if (quarter === 0 && Math.abs(t.angle) < 0.005 && t.ratio === 'free' && t.zoom <= 1.001) return null;
+    const theta = quarter * Math.PI / 2 + t.angle * Math.PI / 180;
+    const si = Math.abs(Math.sin(theta)), co = Math.abs(Math.cos(theta));
+    const a = t.ratio === 'free' ? ((quarter % 2) ? sh / sw : sw / sh) : parseRatio(t.ratio);
+    const mw = Math.min(sw / (co + si / a), sh / (si + co / a));
+    const mh = mw / a;
+    const cw = mw / t.zoom, ch = mh / t.zoom;
+    return {
+      cw, ch, theta,
+      px: (t.ox - 0.5) * (mw - cw),
+      py: (t.oy - 0.5) * (mh - ch),
+    };
+  }
+
+  function resetTransform() {
+    state.transform = { angle: 0, rot: 0, ratio: 'free', zoom: 1, ox: 0.5, oy: 0.5 };
+    $('cropRatio').value = 'free';
+    $('straighten').value = 0;
+    $('cropZoom').value = 1;
+    canvas.style.cursor = '';
+    syncOutputs();
+  }
+
   /* ---------- the core: dither any drawable to an ImageData ------------- */
-  // opts: { jitter:Number (animated grain), phase:Number (ordered-matrix offset) }
-  function ditherSource(drawable, sw, sh, s, opts) {
-    opts = opts || {};
-    const [w, h] = workingDims(sw, sh, s);
+  // draws the (crop/straighten-transformed) source into the work canvas at
+  // working resolution; returns [w, h]
+  function drawSourceToWork(drawable, sw, sh, s) {
+    const cp = cropParams(sw, sh);
+    const [w, h] = workingDims(cp ? cp.cw : sw, cp ? cp.ch : sh, s);
     work.width = w; work.height = h;
     wctx.imageSmoothingEnabled = true;
     wctx.imageSmoothingQuality = 'high';
     wctx.clearRect(0, 0, w, h);
     wctx.fillStyle = '#ffffff';          // flatten transparency onto white
     wctx.fillRect(0, 0, w, h);
-    wctx.drawImage(drawable, 0, 0, w, h);
+    if (cp) {
+      const kx = w / cp.cw, ky = h / cp.ch;
+      wctx.save();
+      wctx.translate(w / 2 - cp.px * kx, h / 2 - cp.py * ky);
+      wctx.scale(kx, ky);
+      wctx.rotate(cp.theta);
+      wctx.drawImage(drawable, -sw / 2, -sh / 2, sw, sh);
+      wctx.restore();
+    } else {
+      wctx.drawImage(drawable, 0, 0, w, h);
+    }
+    return [w, h];
+  }
 
+  // opts: { jitter:Number (animated grain), phase:Number (ordered-matrix offset) }
+  function ditherSource(drawable, sw, sh, s, opts) {
+    opts = opts || {};
+    const [w, h] = drawSourceToWork(drawable, sw, sh, s);
     const id = wctx.getImageData(0, 0, w, h);
     Dither.applyAdjustments(id, s);
     if (opts.jitter) {
@@ -183,11 +237,11 @@
     const [sw, sh] = srcDims();
 
     if ($('showOriginal').checked) {
-      const [w, h] = workingDims(sw, sh, s);
+      const [w, h] = drawSourceToWork(state.image, sw, sh, s);
       canvas.width = w; canvas.height = h;
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, w, h);
-      ctx.drawImage(state.image, 0, 0, w, h);
+      ctx.drawImage(work, 0, 0);
       state.lastOutput = { w, h };
       fitCanvas(w, h); updateStatus(s, sw, sh, w, h);
       return;
@@ -236,6 +290,7 @@
   }
 
   function onImageReady() {
+    resetTransform();
     $('empty').hidden = true;
     $('viewport').hidden = false;
     $('downloadBtn').disabled = false;
@@ -360,7 +415,8 @@
     }
     const s = readSettings();
     const sw = v.videoWidth, sh = v.videoHeight;
-    const [ww, wh] = workingDims(sw, sh, s);
+    const cp0 = cropParams(sw, sh);
+    const [ww, wh] = workingDims(cp0 ? cp0.cw : sw, cp0 ? cp0.ch : sh, s);
     const W2 = Math.max(2, ww & ~1), H2 = Math.max(2, wh & ~1); // H.264 wants even dims
     const fps = +$('mp4Fps').value;
     const px = W2 * H2;
@@ -758,6 +814,8 @@
 
   function syncOutputs() {
     SLIDERS.forEach((id) => { const el = $(id), out = $(id + 'Out'); if (el && out) out.textContent = el.value; });
+    $('straightenOut').textContent = (+$('straighten').value).toFixed(1) + '°';
+    $('cropZoomOut').textContent = (+$('cropZoom').value).toFixed(2) + '×';
   }
 
   /* ---------- reset / randomize ----------------------------------------- */
@@ -770,6 +828,7 @@
     $('mode').value = DEFAULTS.mode; $('levels').value = 2; $('palette').value = DEFAULTS.palette;
     $('inkColor').value = DEFAULTS.ink; $('paperColor').value = DEFAULTS.paper;
     $('animFrames').value = DEFAULTS.animFrames; $('animFps').value = DEFAULTS.animFps;
+    resetTransform();
     syncOutputs(); updateVisibility(); refreshGifInfo();
   }
   function randomize() {
@@ -825,6 +884,60 @@
       if (!items) return;
       for (const it of items) if (it.type.startsWith('image/')) { loadImageFile(it.getAsFile()); break; }
     });
+
+    // crop & straighten
+    let gridTimer = 0;
+    const showGrid = () => {
+      $('gridOverlay').hidden = false;
+      clearTimeout(gridTimer);
+      gridTimer = setTimeout(() => { $('gridOverlay').hidden = true; }, 900);
+    };
+    $('cropRatio').addEventListener('change', () => {
+      state.transform.ratio = $('cropRatio').value;
+      showGrid();
+    });
+    $('straighten').addEventListener('input', () => {
+      state.transform.angle = +$('straighten').value;
+      showGrid();
+    });
+    $('cropZoom').addEventListener('input', () => {
+      state.transform.zoom = +$('cropZoom').value;
+      canvas.style.cursor = state.transform.zoom > 1.001 ? 'grab' : '';
+      showGrid();
+    });
+    $('rotL').addEventListener('click', () => { state.transform.rot = (state.transform.rot + 3) % 4; schedule(); });
+    $('rotR').addEventListener('click', () => { state.transform.rot = (state.transform.rot + 1) % 4; schedule(); });
+    $('cropResetBtn').addEventListener('click', () => { resetTransform(); schedule(); });
+
+    // drag the preview to reframe when zoomed past 1x
+    let panDrag = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!state.image || state.transform.zoom <= 1.001) return;
+      panDrag = { x: e.clientX, y: e.clientY, ox: state.transform.ox, oy: state.transform.oy };
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+      canvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!panDrag) return;
+      const t = state.transform;
+      const [sw, sh] = srcDims();
+      const cp = cropParams(sw, sh);
+      if (!cp) return;
+      const pxPerUnit = canvas.clientWidth / cp.cw;   // display px per source unit
+      const slackX = cp.cw * (t.zoom - 1), slackY = cp.ch * (t.zoom - 1);
+      if (slackX > 1e-6) t.ox = Math.min(1, Math.max(0, panDrag.ox - (e.clientX - panDrag.x) / pxPerUnit / slackX));
+      if (slackY > 1e-6) t.oy = Math.min(1, Math.max(0, panDrag.oy - (e.clientY - panDrag.y) / pxPerUnit / slackY));
+      showGrid();
+      schedule();
+    });
+    const endPan = () => {
+      if (!panDrag) return;
+      panDrag = null;
+      canvas.style.cursor = state.transform.zoom > 1.001 ? 'grab' : '';
+    };
+    canvas.addEventListener('pointerup', endPan);
+    canvas.addEventListener('pointercancel', endPan);
 
     // custom palette
     $('addColor').addEventListener('click', () => {

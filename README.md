@@ -25,6 +25,13 @@ python -m http.server 8000
 Still images, animated GIFs and video clips (anything your browser can play —
 MP4, WebM, …) are all accepted.
 
+**Crop & straighten** — aspect-ratio presets (1:1, 4:5, 3:4, 2:3, 9:16 story,
+5:4, 4:3, 3:2, 16:9), fine rotation from −45° to +45° in 0.1° steps with
+auto-fit (straightening never exposes blank corners), 90° rotation buttons,
+and zoom-to-reframe: zoom past 1× and drag the preview to position the crop.
+A rule-of-thirds grid appears while you adjust. Applies to stills, GIFs and
+video alike — all exports included.
+
 **18 dithering algorithms**
 - *Error diffusion:* Floyd–Steinberg, False Floyd–Steinberg, Jarvis–Judice–Ninke,
   Stucki, Atkinson, Burkes, Sierra (3-row), Two-Row Sierra, Sierra Lite, Stevenson–Arce

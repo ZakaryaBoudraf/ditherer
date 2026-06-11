@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dither Boy — local</title>
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=4" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%230b0b0d'/><g fill='%2300e08a'><rect x='1' y='1' width='2' height='2'/><rect x='5' y='1' width='2' height='2'/><rect x='9' y='1' width='2' height='2'/><rect x='13' y='1' width='2' height='2'/><rect x='3' y='3' width='2' height='2'/><rect x='7' y='3' width='2' height='2'/><rect x='11' y='3' width='2' height='2'/><rect x='1' y='5' width='2' height='2'/><rect x='9' y='5' width='2' height='2'/><rect x='5' y='7' width='2' height='2'/><rect x='13' y='7' width='2' height='2'/></g></svg>" />
 </head>
 <body>
@@ -34,6 +34,41 @@
         <label class="check">
           <input type="checkbox" id="showOriginal" /> Show original
         </label>
+      </section>
+
+      <!-- CROP & STRAIGHTEN -->
+      <section class="panel">
+        <h2>Crop &amp; straighten</h2>
+        <div class="control">
+          <label for="cropRatio">Aspect ratio</label>
+          <select id="cropRatio">
+            <option value="free">Free (original)</option>
+            <option value="1:1">1:1 square</option>
+            <option value="4:5">4:5 portrait</option>
+            <option value="3:4">3:4 portrait</option>
+            <option value="2:3">2:3 portrait</option>
+            <option value="9:16">9:16 story</option>
+            <option value="5:4">5:4</option>
+            <option value="4:3">4:3</option>
+            <option value="3:2">3:2</option>
+            <option value="16:9">16:9 wide</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="straighten">Straighten <output id="straightenOut"></output></label>
+          <input type="range" id="straighten" min="-45" max="45" step="0.1" value="0" />
+          <p class="hint">Auto-fits the crop — no blank corners.</p>
+        </div>
+        <div class="control">
+          <label for="cropZoom">Zoom / reframe <output id="cropZoomOut"></output></label>
+          <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" />
+          <p class="hint">Past 1×, drag the preview to reframe.</p>
+        </div>
+        <div class="row">
+          <button id="rotL" class="btn ghost" title="Rotate 90° counter-clockwise">⟲ 90°</button>
+          <button id="rotR" class="btn ghost" title="Rotate 90° clockwise">⟳ 90°</button>
+          <button id="cropResetBtn" class="btn ghost" title="Reset crop, zoom and angle">Reset</button>
+        </div>
       </section>
 
       <!-- PIXELATION -->
@@ -249,14 +284,17 @@
         Stills, animated GIFs and video clips all work.</p>
       </div>
       <div id="viewport" class="viewport" hidden>
-        <canvas id="canvas"></canvas>
+        <div class="canvas-wrap">
+          <canvas id="canvas"></canvas>
+          <div id="gridOverlay" hidden></div>
+        </div>
       </div>
       <div id="status" class="status" hidden></div>
     </main>
   </div>
 
-  <script src="dither.js?v=3"></script>
-  <script src="codec.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="dither.js?v=4"></script>
+  <script src="codec.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
