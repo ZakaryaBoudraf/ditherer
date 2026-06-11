@@ -7,6 +7,20 @@
   const $ = (id) => document.getElementById(id);
   const clamp = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
   const tick = () => new Promise((r) => setTimeout(r));
+  // await an event; optional timeout so a missing event can't hang an export
+  const once = (el, evt, timeoutMs) => new Promise((res) => {
+    let t = null;
+    const h = () => { if (t) clearTimeout(t); res(); };
+    el.addEventListener(evt, h, { once: true });
+    if (timeoutMs) t = setTimeout(() => { el.removeEventListener(evt, h); res(); }, timeoutMs);
+  });
+  const fmtTime = (sec) => {
+    if (!isFinite(sec)) return '–:––';
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return m + ':' + String(s).padStart(2, '0');
+  };
+
+  const MAX_GIF_FRAMES = 200; // cap for video → GIF sampling
 
   /* ---------- preset palettes ------------------------------------------- */
   const PALETTES = {
@@ -34,8 +48,11 @@
 
   /* ---------- state ----------------------------------------------------- */
   const state = {
-    image: null,          // current preview source: an <img> OR a <canvas> (gif frame 0)
+    image: null,          // current preview source: <img>, <canvas> (gif frame 0) or <video>
     gif: null,            // { width, height, frames:[{data,delayCs}] } when an animated GIF is loaded
+    video: null,          // <video> element when a video is loaded
+    videoUrl: null,       // object URL backing the video (revoked on replace)
+    exporting: false,     // true during seek-based exports; pauses the live loop
     batch: [],            // queued File objects for batch processing
     customColors: ['#1a1c2c', '#5d275d', '#b13e53', '#ef7d57', '#ffcd75', '#a7f070', '#38b764', '#257179'],
     lastOutput: null,     // { w, h } of the last preview render
@@ -113,7 +130,7 @@
 
   const srcDims = () => {
     const im = state.image;
-    return [im.naturalWidth || im.width, im.naturalHeight || im.height];
+    return [im.naturalWidth || im.videoWidth || im.width, im.naturalHeight || im.videoHeight || im.height];
   };
   const workingDims = (sw, sh, s) => {
     const scale = Math.min(1, s.resolution / Math.max(sw, sh));
@@ -152,7 +169,7 @@
   /* ---------- live preview ---------------------------------------------- */
   let pending = false;
   function schedule() {
-    if (pending) return;
+    if (pending || state.exporting) return;
     pending = true;
     requestAnimationFrame(() => { pending = false; render(); });
   }
@@ -178,14 +195,14 @@
     ctx.putImageData(out, 0, 0);
     state.lastOutput = { w, h };
     fitCanvas(w, h); updateStatus(s, sw, sh, w, h);
-    refreshGifInfo();
   }
 
   function updateStatus(s, sw, sh, w, h) {
     $('status').hidden = false;
-    const frames = state.gif ? ` · <b>${state.gif.frames.length}</b> GIF frames` : '';
+    const extra = state.gif ? ` · <b>${state.gif.frames.length}</b> GIF frames`
+      : state.video ? ` · <b>${fmtTime(state.video.duration)}</b> clip` : '';
     $('status').innerHTML = `<b>${sw}×${sh}</b> source · dithered at <b>${w}×${h}</b> · ` +
-      `export <b>${w * s.exportScale}×${h * s.exportScale}</b>${frames}`;
+      `export <b>${w * s.exportScale}×${h * s.exportScale}</b>${extra}`;
   }
 
   function fitCanvas(w, h) {
@@ -197,9 +214,11 @@
     canvas.style.height = Math.round(h * use) + 'px';
   }
 
-  /* ---------- image / GIF loading --------------------------------------- */
+  /* ---------- media loading ---------------------------------------------- */
   function loadImageFile(file) {
-    if (!file || !file.type.startsWith('image/')) return;
+    if (!file) return;
+    if (file.type.startsWith('video/')) { loadVideoFile(file); return; }
+    if (!file.type.startsWith('image/')) return;
     if (file.type === 'image/gif' && file.arrayBuffer) {
       file.arrayBuffer().then((buf) => {
         try {
@@ -219,7 +238,10 @@
     $('downloadBtn').disabled = false;
     $('copyBtn').disabled = false;
     $('exportGifBtn').disabled = false;
+    $('gifProgress').textContent = '';
+    $('videoProgress').textContent = '';
     updateVisibility();
+    refreshGifInfo();
     render();
   }
 
@@ -227,13 +249,14 @@
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
-      img.onload = () => { state.gif = null; state.image = img; onImageReady(); };
+      img.onload = () => { cleanupVideo(); state.gif = null; state.image = img; onImageReady(); };
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
   }
 
   function setupGif(gif) {
+    cleanupVideo();
     state.gif = gif;
     const c = document.createElement('canvas');
     c.width = gif.width; c.height = gif.height;
@@ -242,16 +265,127 @@
     onImageReady();
   }
 
-  function refreshGifInfo() {
-    const info = $('gifInfo');
-    if (state.gif) {
-      info.textContent = `Animated GIF — ${state.gif.frames.length} frames ` +
-        `(${state.gif.width}×${state.gif.height}). Export re-dithers every frame.`;
-    } else if (state.image) {
-      info.textContent = `Still image — “Export animated GIF” will animate it (${$('animFrames').value} frames).`;
-    } else {
-      info.textContent = 'No image loaded.';
+  /* ---------- video ------------------------------------------------------ */
+  let videoRaf = 0;
+  let scrubbing = false;
+
+  function cleanupVideo() {
+    if (state.video) { try { state.video.pause(); } catch (e) {} }
+    if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
+    state.video = null; state.videoUrl = null;
+    cancelAnimationFrame(videoRaf);
+  }
+
+  function loadVideoFile(file) {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.loop = true; v.preload = 'auto';
+    v.addEventListener('error', () => {
+      URL.revokeObjectURL(url);
+      $('gifInfo').textContent = 'Could not decode that video in this browser.';
+    });
+    v.addEventListener('loadeddata', async () => {
+      // MediaRecorder-made WebMs report Infinity until forced to the end once
+      if (!isFinite(v.duration)) {
+        v.currentTime = 1e7;
+        await once(v, 'durationchange', 3000);
+        v.currentTime = 0;
+        await once(v, 'seeked', 3000);
+      }
+      cleanupVideo();
+      state.gif = null;
+      state.video = v;
+      state.videoUrl = url;
+      state.image = v;
+      wireVideo(v);
+      onImageReady();
+      v.play().catch(() => {});
+    }, { once: true });
+    v.src = url;
+  }
+
+  function wireVideo(v) {
+    v.addEventListener('play', () => { $('videoPlayBtn').textContent = 'Pause'; startVideoLoop(); });
+    v.addEventListener('pause', () => { $('videoPlayBtn').textContent = 'Play'; updateSeekUI(); });
+    v.addEventListener('ended', () => { $('videoPlayBtn').textContent = 'Play'; });
+    v.addEventListener('seeked', () => { if (!state.exporting) schedule(); });
+  }
+
+  function startVideoLoop() {
+    cancelAnimationFrame(videoRaf);
+    const step = () => {
+      const v = state.video;
+      if (!v || v.paused || v.ended || state.exporting) return;
+      render();
+      updateSeekUI();
+      videoRaf = requestAnimationFrame(step);
+    };
+    videoRaf = requestAnimationFrame(step);
+  }
+
+  function updateSeekUI() {
+    const v = state.video;
+    if (!v) return;
+    if (!scrubbing && isFinite(v.duration) && v.duration > 0) {
+      $('videoSeek').value = Math.round((v.currentTime / v.duration) * 1000);
     }
+    $('videoTime').textContent = fmtTime(v.currentTime) + ' / ' + fmtTime(v.duration);
+  }
+
+  /* ---------- video export (WebM via MediaRecorder) ---------------------- */
+  async function exportVideo() {
+    const v = state.video;
+    if (!v || state.exporting) return;
+    const btn = $('exportVideoBtn'), prog = $('videoProgress');
+    if (!window.MediaRecorder) { prog.textContent = 'MediaRecorder is not supported in this browser.'; return; }
+    const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+      .find((m) => MediaRecorder.isTypeSupported(m));
+    if (!mime) { prog.textContent = 'No supported recording format found.'; return; }
+
+    btn.disabled = true;
+    $('exportGifBtn').disabled = true;
+
+    const stream = canvas.captureStream(30);
+    const restoreMuted = v.muted;
+    try {
+      // include the original audio track where the browser supports tapping it
+      const cap = v.captureStream ? v.captureStream() : (v.mozCaptureStream ? v.mozCaptureStream() : null);
+      if (cap) {
+        v.muted = false;
+        cap.getAudioTracks().forEach((t) => stream.addTrack(t));
+      }
+    } catch (err) { /* video-only recording */ }
+
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8e6 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const stopped = new Promise((r) => { rec.onstop = r; });
+
+    const wasLoop = v.loop;
+    v.loop = false;
+    v.pause();
+    if (v.currentTime > 1e-4) { v.currentTime = 0; await once(v, 'seeked', 3000); }
+    render();
+
+    const onProgress = () => { prog.textContent = `Recording… ${v.currentTime.toFixed(1)} / ${v.duration.toFixed(1)} s`; };
+    v.addEventListener('timeupdate', onProgress);
+    rec.start(250);
+    try { await v.play(); }
+    catch (err) { v.muted = true; await v.play().catch(() => {}); }
+    await Promise.race([once(v, 'ended'), once(v, 'pause')]); // pausing stops the recording early
+    rec.stop();
+    await stopped;
+
+    v.removeEventListener('timeupdate', onProgress);
+    v.loop = wasLoop;
+    v.muted = restoreMuted;
+
+    const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
+    const blob = new Blob(chunks, { type: mime.split(';')[0] });
+    downloadBlob(blob, `dither-${Date.now()}.${ext}`);
+    prog.textContent = `Done — ${(blob.size / 1024 / 1024).toFixed(1)} MB ${ext.toUpperCase()}`;
+    btn.disabled = false;
+    $('exportGifBtn').disabled = false;
   }
 
   /* ---------- single-image export (PNG) --------------------------------- */
@@ -280,7 +414,7 @@
 
   /* ---------- animated GIF export --------------------------------------- */
   async function exportGif() {
-    if (!state.image) return;
+    if (!state.image || state.exporting) return;
     const s = readSettings();
     const btn = $('exportGifBtn'), prog = $('gifProgress');
     btn.disabled = true;
@@ -288,6 +422,7 @@
 
     const frames = [];
     let W, H;
+    let resumeVideo = false;
     try {
       if (state.gif) {
         const g = state.gif;
@@ -298,6 +433,28 @@
           W = r.w; H = r.h;
           frames.push({ data: r.out.data, delayCs: Math.max(2, g.frames[i].delayCs || 10) });
           prog.textContent = `Dithering frame ${i + 1}/${g.frames.length}…`;
+          if (i % 3 === 0) await tick();
+        }
+      } else if (state.video) {
+        // sample the video timeline frame by frame
+        const v = state.video;
+        resumeVideo = !v.paused;
+        v.pause();
+        state.exporting = true;
+        const fps = +$('animFps').value;
+        const total = Math.max(1, Math.min(Math.floor(v.duration * fps), MAX_GIF_FRAMES));
+        const delay = Math.max(2, Math.round(100 / fps));
+        for (let i = 0; i < total; i++) {
+          const t = i / fps;
+          if (t >= v.duration) break;
+          if (Math.abs(v.currentTime - t) > 1e-4) {
+            v.currentTime = t;
+            await once(v, 'seeked', 3000);
+          }
+          const r = ditherSource(v, v.videoWidth, v.videoHeight, s);
+          W = r.w; H = r.h;
+          frames.push({ data: r.out.data, delayCs: delay });
+          prog.textContent = `Dithering frame ${i + 1}/${total}…`;
           if (i % 3 === 0) await tick();
         }
       } else {
@@ -321,6 +478,8 @@
       console.error(err);
       prog.textContent = 'GIF export failed: ' + err.message;
     } finally {
+      state.exporting = false;
+      if (resumeVideo && state.video) state.video.play().catch(() => {});
       btn.disabled = false;
     }
   }
@@ -432,11 +591,27 @@
     $('duoWrap').hidden = s.mode === 'color';
     $('colorWrap').hidden = s.mode !== 'color';
     $('customWrap').hidden = !(s.mode === 'color' && s.palette === 'custom');
-    $('shimmerFramesWrap').hidden = !!state.gif;
+    $('shimmerFramesWrap').hidden = !!state.gif || !!state.video;
+    $('videoPanel').hidden = !state.video;
 
     const labels = $('duoWrap').querySelectorAll('.swatch span');
     if (s.mode === 'grayscale') { labels[0].textContent = 'Dark tint'; labels[1].textContent = 'Light tint'; }
     else { labels[0].textContent = 'Ink'; labels[1].textContent = 'Paper'; }
+  }
+
+  function refreshGifInfo() {
+    const info = $('gifInfo');
+    if (state.video) {
+      info.textContent = `Video — “Export animated GIF” samples it at ${$('animFps').value} fps ` +
+        `(up to ${MAX_GIF_FRAMES} frames). For full quality use the WebM export below.`;
+    } else if (state.gif) {
+      info.textContent = `Animated GIF — ${state.gif.frames.length} frames ` +
+        `(${state.gif.width}×${state.gif.height}). Export re-dithers every frame.`;
+    } else if (state.image) {
+      info.textContent = `Still image — “Export animated GIF” will animate it (${$('animFrames').value} frames).`;
+    } else {
+      info.textContent = 'No image loaded.';
+    }
   }
 
   /* ---------- populate selects ------------------------------------------ */
@@ -507,7 +682,7 @@
     // generic: any control change re-renders (rAF-debounced)
     document.querySelectorAll('input, select').forEach((el) => {
       const evt = el.type === 'range' ? 'input' : 'change';
-      el.addEventListener(evt, () => { syncOutputs(); updateVisibility(); if (!state.gif) refreshGifInfo(); schedule(); });
+      el.addEventListener(evt, () => { syncOutputs(); updateVisibility(); refreshGifInfo(); schedule(); });
     });
 
     // upload via drop zone
@@ -554,6 +729,23 @@
     $('downloadBtn').addEventListener('click', download);
     $('copyBtn').addEventListener('click', copyToClipboard);
     $('exportGifBtn').addEventListener('click', exportGif);
+    $('exportVideoBtn').addEventListener('click', exportVideo);
+
+    // video transport
+    $('videoPlayBtn').addEventListener('click', () => {
+      const v = state.video;
+      if (!v) return;
+      if (v.paused || v.ended) v.play().catch(() => {}); else v.pause();
+    });
+    const seekEl = $('videoSeek');
+    seekEl.addEventListener('pointerdown', () => { scrubbing = true; });
+    window.addEventListener('pointerup', () => { scrubbing = false; });
+    seekEl.addEventListener('input', () => {
+      const v = state.video;
+      if (!v || !isFinite(v.duration) || state.exporting) return;
+      v.currentTime = (seekEl.value / 1000) * v.duration;
+      updateSeekUI();
+    });
 
     // batch
     $('batchAddBtn').addEventListener('click', () => $('batchInput').click());

@@ -22,6 +22,8 @@ python -m http.server 8000
 ## Features
 
 **Input** — drag & drop, file picker, or paste from clipboard (Ctrl/Cmd+V).
+Still images, animated GIFs and video clips (anything your browser can play —
+MP4, WebM, …) are all accepted.
 
 **18 dithering algorithms**
 - *Error diffusion:* Floyd–Steinberg, False Floyd–Steinberg, Jarvis–Judice–Ninke,
@@ -55,6 +57,15 @@ renders N frames with a moving/boiling dither pattern at an adjustable frame rat
 — echoing the original's "temporal" effects. GIF encoding and decoding are both
 implemented from scratch (no libraries).
 
+**Video** — load a video clip and the live preview dithers it in real time while
+it plays, with play/pause and a seek bar. Export options:
+- **Dithered video (WebM)** — records the live preview via `MediaRecorder` in
+  real time (the export takes as long as the clip), original audio included
+  where the browser supports capturing it. Tweaking sliders *during* the
+  recording is captured too — you can perform the export live.
+- **Animated GIF** — samples the video timeline at your chosen fps (up to 200
+  frames) and re-dithers every sampled frame.
+
 **Batch processing** — queue any number of images, dither them all with the
 current settings, and download the results as a single `.zip` (also written from
 scratch, no libraries).
@@ -71,8 +82,10 @@ scratch, no libraries).
 
 ## Notes & differences from the original
 
-This is an image-focused homage. The commercial Dither Boy additionally offers
-full video dithering with a timeline, a much larger effect library (~63),
-stackable reorderable effect layers, and vector/embroidery export — those are out
-of scope here (animated GIF in/out is supported, but not video formats).
-Everything above is implemented from scratch in vanilla JS on the Canvas API.
+This is a homage, not a clone. The commercial Dither Boy additionally offers a
+timeline editor with keyframes, a much larger effect library (~63), stackable
+reorderable effect layers, and vector/embroidery export — those are out of scope
+here. Video in/out is supported (live dithered playback, WebM and GIF export),
+but export rides on the browser's `MediaRecorder`, so WebM is the output format
+rather than MP4 on most browsers. Everything above is implemented from scratch
+in vanilla JS on the Canvas API.

@@ -23,8 +23,8 @@
       <section class="panel">
         <h2>Image</h2>
         <div id="dropZone" class="drop">
-          <input type="file" id="fileInput" accept="image/*" hidden />
-          <p><strong>Drop an image</strong></p>
+          <input type="file" id="fileInput" accept="image/*,video/*" hidden />
+          <p><strong>Drop an image, GIF or video</strong></p>
           <p class="muted">or click to browse · or paste from clipboard</p>
         </div>
         <div class="row">
@@ -173,6 +173,23 @@
         <p id="gifProgress" class="hint"></p>
       </section>
 
+      <!-- VIDEO -->
+      <section class="panel" id="videoPanel" hidden>
+        <h2>Video</h2>
+        <div class="row">
+          <button id="videoPlayBtn" class="btn ghost">Pause</button>
+          <span id="videoTime" class="hint">0:00 / 0:00</span>
+        </div>
+        <div class="control">
+          <input type="range" id="videoSeek" min="0" max="1000" step="1" value="0" />
+        </div>
+        <button id="exportVideoBtn" class="btn primary">Export dithered video (WebM)</button>
+        <p class="hint">Records the live preview in real time — takes as long as the clip plays.
+        Slider changes during recording are captured too. The GIF panel above can also
+        sample this video into an animated GIF.</p>
+        <p id="videoProgress" class="hint"></p>
+      </section>
+
       <!-- BATCH -->
       <section class="panel">
         <h2>Batch</h2>
@@ -213,8 +230,9 @@
     <main class="stage">
       <div id="empty" class="empty">
         <div class="empty-art" aria-hidden="true"></div>
-        <h2>Drop an image to begin</h2>
-        <p class="muted">Drag &amp; drop, click <em>Image → Drop an image</em>, or paste (Ctrl/Cmd&nbsp;+&nbsp;V).</p>
+        <h2>Drop an image or video to begin</h2>
+        <p class="muted">Drag &amp; drop, click <em>Image → Drop an image</em>, or paste (Ctrl/Cmd&nbsp;+&nbsp;V).
+        Stills, animated GIFs and video clips all work.</p>
       </div>
       <div id="viewport" class="viewport" hidden>
         <canvas id="canvas"></canvas>
