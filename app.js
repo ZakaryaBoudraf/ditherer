@@ -125,7 +125,57 @@
       noise: +$('noise').value,
       chroma: +$('chroma').value,
       exportScale: +$('exportScale').value,
+      outputSize: $('outputSize').value,
+      outW: +$('outW').value,
+      outH: +$('outH').value,
+      fitMode: $('fitMode').value,
+      fillColor: $('fillColor').value,
     };
+  }
+
+  // null for native output, else the target { W, H } in pixels
+  function outputDims(s) {
+    if (!s || s.outputSize === 'native') return null;
+    let W, H;
+    if (s.outputSize === 'custom') { W = Math.round(s.outW); H = Math.round(s.outH); }
+    else { const m = String(s.outputSize).split('x'); W = +m[0]; H = +m[1]; }
+    if (!(W >= 1 && H >= 1)) return null;
+    return { W: Math.min(8192, W), H: Math.min(8192, H) };
+  }
+
+  // place dithered content (a canvas, w×h) into the final frame.
+  // native: optionally upscale ×scale; fixed: contain/cover/stretch + fill bars.
+  // pass opts.target to draw into an existing canvas (the live preview).
+  function composeFramed(content, w, h, s, opts) {
+    opts = opts || {};
+    const dims = outputDims(s);
+    if (!dims) {
+      const scale = opts.scale || 1;
+      if (!opts.target && scale === 1) return content;
+      const c = opts.target || document.createElement('canvas');
+      c.width = w * scale; c.height = h * scale;
+      const cx = c.getContext('2d');
+      cx.imageSmoothingEnabled = false;
+      cx.clearRect(0, 0, c.width, c.height);
+      cx.drawImage(content, 0, 0, c.width, c.height);
+      return c;
+    }
+    let W = dims.W, H = dims.H;
+    if (opts.even) { W = Math.max(2, W - (W & 1)); H = Math.max(2, H - (H & 1)); }
+    const c = opts.target || document.createElement('canvas');
+    c.width = W; c.height = H;
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    cx.fillStyle = /^#[0-9a-fA-F]{6}$/.test(s.fillColor) ? s.fillColor : '#000000';
+    cx.fillRect(0, 0, W, H);
+    let dw, dh;
+    if (s.fitMode === 'stretch') { dw = W; dh = H; }
+    else {
+      const sc = (s.fitMode === 'cover') ? Math.max(W / w, H / h) : Math.min(W / w, H / h);
+      dw = Math.max(1, Math.round(w * sc)); dh = Math.max(1, Math.round(h * sc));
+    }
+    cx.drawImage(content, Math.round((W - dw) / 2), Math.round((H - dh) / 2), dw, dh);
+    return c;
   }
 
   /* ---------- build the working palette + dither "step" ----------------- */
@@ -155,6 +205,8 @@
   const wctx = work.getContext('2d', { willReadFrequently: true });
   const gifTmp = document.createElement('canvas');
   const gtctx = gifTmp.getContext('2d');
+  const dcv = document.createElement('canvas');   // holds dithered content for the preview compose
+  const dctx = dcv.getContext('2d');
   const canvas = $('canvas');
   const ctx = canvas.getContext('2d');
 
@@ -256,6 +308,38 @@
     return { out, w, h };
   }
 
+  /* ---------- fill colour + eyedropper ---------------------------------- */
+  let eyedropping = false;
+  function setFill(hex) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
+    $('fillColor').value = hex.toLowerCase();
+    $('fillHex').value = hex.toUpperCase();
+    return true;
+  }
+  function startEyedrop() {
+    if (!state.image) return;
+    eyedropping = true;
+    canvas.classList.add('eyedrop');
+    $('eyedropBtn').classList.add('active');
+    $('eyedropBtn').textContent = '⌖ Click image';
+  }
+  function stopEyedrop() {
+    eyedropping = false;
+    canvas.classList.remove('eyedrop');
+    $('eyedropBtn').classList.remove('active');
+    $('eyedropBtn').textContent = '⌖ Pick';
+  }
+  function pickColorAt(e) {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const px = Math.max(0, Math.min(canvas.width - 1, Math.floor((e.clientX - rect.left) / rect.width * canvas.width)));
+    const py = Math.max(0, Math.min(canvas.height - 1, Math.floor((e.clientY - rect.top) / rect.height * canvas.height)));
+    const d = ctx.getImageData(px, py, 1, 1).data;
+    setFill(rgbToHex([d[0], d[1], d[2]]));
+    stopEyedrop();
+    schedule();
+  }
+
   /* ---------- live preview ---------------------------------------------- */
   let pending = false;
   function schedule() {
@@ -271,29 +355,29 @@
 
     if ($('showOriginal').checked) {
       const [w, h] = drawSourceToWork(state.image, sw, sh, s);
-      canvas.width = w; canvas.height = h;
-      ctx.imageSmoothingEnabled = false;
-      ctx.clearRect(0, 0, w, h);
-      ctx.drawImage(work, 0, 0);
+      composeFramed(work, w, h, s, { target: canvas });   // frame the raw source too
       state.lastOutput = { w, h };
-      fitCanvas(w, h); updateStatus(s, sw, sh, w, h);
+      fitCanvas(canvas.width, canvas.height); updateStatus(s, sw, sh, w, h);
       return;
     }
 
     const { out, w, h } = ditherSource(state.image, sw, sh, s);
-    canvas.width = w; canvas.height = h;
-    ctx.putImageData(out, 0, 0);
+    dcv.width = w; dcv.height = h; dctx.putImageData(out, 0, 0);
+    composeFramed(dcv, w, h, s, { target: canvas });
     state.lastOutput = { w, h };
-    fitCanvas(w, h); updateStatus(s, sw, sh, w, h);
+    fitCanvas(canvas.width, canvas.height); updateStatus(s, sw, sh, w, h);
   }
 
   function updateStatus(s, sw, sh, w, h) {
     $('status').hidden = false;
+    const dims = outputDims(s);
+    const exW = dims ? canvas.width : w * s.exportScale;
+    const exH = dims ? canvas.height : h * s.exportScale;
     const extra = state.camera ? ' · <b>LIVE</b> camera'
       : state.gif ? ` · <b>${state.gif.frames.length}</b> GIF frames`
       : state.video ? ` · <b>${fmtTime(state.video.duration)}</b> clip` : '';
     $('status').innerHTML = `<b>${sw}×${sh}</b> source · dithered at <b>${w}×${h}</b> · ` +
-      `export <b>${w * s.exportScale}×${h * s.exportScale}</b>${extra}`;
+      `output <b>${exW}×${exH}</b>${extra}`;
   }
 
   function fitCanvas(w, h) {
@@ -592,9 +676,15 @@
     }
     const s = readSettings();
     const sw = v.videoWidth, sh = v.videoHeight;
-    const cp0 = cropParams(sw, sh);
-    const [ww, wh] = workingDims(cp0 ? cp0.cw : sw, cp0 ? cp0.ch : sh, s);
-    const W2 = Math.max(2, ww & ~1), H2 = Math.max(2, wh & ~1); // H.264 wants even dims
+    const dims = outputDims(s);
+    let W2, H2;
+    if (dims) {                                   // fixed output size (even for H.264)
+      W2 = Math.max(2, dims.W - (dims.W & 1)); H2 = Math.max(2, dims.H - (dims.H & 1));
+    } else {
+      const cp0 = cropParams(sw, sh);
+      const [ww, wh] = workingDims(cp0 ? cp0.cw : sw, cp0 ? cp0.ch : sh, s);
+      W2 = Math.max(2, ww & ~1); H2 = Math.max(2, wh & ~1);
+    }
     const fps = +$('mp4Fps').value;
     const px = W2 * H2;
     // constrained-baseline ladder, level picked by frame size
@@ -646,7 +736,8 @@
         if (t >= v.duration) break;
         if (!(await seekVideo(v, t))) break;
         const r = ditherSource(v, sw, sh, s);
-        tctx.putImageData(r.out, 0, 0);              // clips odd row/col if any
+        if (dims) composeFramed(canvasFromImageData(r.out), r.w, r.h, s, { target: tmp, even: true });
+        else tctx.putImageData(r.out, 0, 0);         // native: clips odd row/col if any
         const frame = new VideoFrame(tmp, {
           timestamp: Math.round((i * 1e6) / fps),
           duration: Math.round(1e6 / fps),
@@ -734,10 +825,12 @@
 
   /* ---------- single-image export (PNG) --------------------------------- */
   function buildExportCanvas() {
+    // the visible canvas already holds the composed frame; fixed output is
+    // exact (scale 1), native output upscales by the chosen export scale.
     const s = readSettings();
-    const { w, h } = state.lastOutput;
+    const scale = outputDims(s) ? 1 : s.exportScale;
     const ex = document.createElement('canvas');
-    ex.width = w * s.exportScale; ex.height = h * s.exportScale;
+    ex.width = canvas.width * scale; ex.height = canvas.height * scale;
     const ectx = ex.getContext('2d');
     ectx.imageSmoothingEnabled = false;
     ectx.drawImage(canvas, 0, 0, ex.width, ex.height);
@@ -767,15 +860,33 @@
     const frames = [];
     let W, H;
     let resumeVideo = false;
+    const dims = outputDims(s);
+    const memGuard = (n) => {
+      if (dims && dims.W * dims.H * 4 * n > 600e6) {
+        throw new Error(`output too large for GIF (${dims.W}×${dims.H} × ${n} frames). ` +
+          'Pick a smaller output size or fewer frames.');
+      }
+    };
+    // compose each dithered frame into the chosen output size (or native)
+    const pushFrame = (out, w, h, delayCs) => {
+      if (dims) {
+        const c = composeFramed(canvasFromImageData(out), w, h, s, {});
+        W = c.width; H = c.height;
+        frames.push({ data: c.getContext('2d').getImageData(0, 0, W, H).data, delayCs });
+      } else {
+        W = w; H = h;
+        frames.push({ data: out.data, delayCs });
+      }
+    };
     try {
       if (state.gif) {
         const g = state.gif;
+        memGuard(g.frames.length);
         for (let i = 0; i < g.frames.length; i++) {
           gifTmp.width = g.width; gifTmp.height = g.height;
           gtctx.putImageData(new ImageData(g.frames[i].data, g.width, g.height), 0, 0);
           const r = ditherSource(gifTmp, g.width, g.height, s);
-          W = r.w; H = r.h;
-          frames.push({ data: r.out.data, delayCs: Math.max(2, g.frames[i].delayCs || 10) });
+          pushFrame(r.out, r.w, r.h, Math.max(2, g.frames[i].delayCs || 10));
           prog.textContent = `Dithering frame ${i + 1}/${g.frames.length}…`;
           if (i % 3 === 0) await tick();
         }
@@ -788,13 +899,13 @@
         const fps = +$('animFps').value;
         const total = Math.max(1, Math.min(Math.floor(v.duration * fps), MAX_GIF_FRAMES));
         const delay = Math.max(2, Math.round(100 / fps));
+        memGuard(total);
         for (let i = 0; i < total; i++) {
           const t = i / fps;
           if (t >= v.duration) break;
           if (!(await seekVideo(v, t))) break;
           const r = ditherSource(v, v.videoWidth, v.videoHeight, s);
-          W = r.w; H = r.h;
-          frames.push({ data: r.out.data, delayCs: delay });
+          pushFrame(r.out, r.w, r.h, delay);
           prog.textContent = `Dithering frame ${i + 1}/${total}…`;
           if (i % 3 === 0) await tick();
         }
@@ -802,10 +913,10 @@
         const [sw, sh] = srcDims();
         const N = +$('animFrames').value;
         const delay = Math.max(2, Math.round(100 / +$('animFps').value));
+        memGuard(N);
         for (let i = 0; i < N; i++) {
           const r = ditherSource(state.image, sw, sh, s, { jitter: 20, phase: i });
-          W = r.w; H = r.h;
-          frames.push({ data: r.out.data, delayCs: delay });
+          pushFrame(r.out, r.w, r.h, delay);
           prog.textContent = `Rendering frame ${i + 1}/${N}…`;
           if (i % 3 === 0) await tick();
         }
@@ -857,8 +968,10 @@
       await tick();
       try {
         const img = await loadFileToImage(f);
-        const { out } = ditherSource(img, img.naturalWidth, img.naturalHeight, s);
-        const blob = await upscaleImageDataToBlob(out, s.exportScale);
+        const { out, w, h } = ditherSource(img, img.naturalWidth, img.naturalHeight, s);
+        const framed = composeFramed(canvasFromImageData(out), w, h, s,
+          { scale: outputDims(s) ? 1 : s.exportScale });
+        const blob = await new Promise((r) => framed.toBlob(r, 'image/png'));
         const buf = new Uint8Array(await blob.arrayBuffer());
         files.push({ name: baseName(f.name) + '-dither.png', data: buf });
       } catch (err) { console.warn('skipped', f.name, err); }
@@ -941,6 +1054,11 @@
     $('camMirrorWrap').hidden = !camOn;
     if (!camOn) $('camDeviceWrap').hidden = true;
     $('camStartBtn').textContent = camOn ? 'Restart camera' : 'Start camera';
+    const fixed = !!outputDims(s);
+    $('customSizeWrap').hidden = s.outputSize !== 'custom';
+    $('scaleWrap').hidden = fixed;             // export scale only applies to native output
+    $('fitWrap').hidden = !fixed;
+    $('fillWrap').hidden = !(fixed && s.fitMode === 'contain');
     $('mp4FpsWrap').hidden = $('videoFormat').value !== 'mp4';
     $('videoHint').textContent = $('videoFormat').value === 'mp4'
       ? 'Frame-accurate H.264 encode via WebCodecs — plays everywhere, but silent (no audio). ' +
@@ -1015,6 +1133,9 @@
     $('mode').value = DEFAULTS.mode; $('levels').value = 2; $('palette').value = DEFAULTS.palette;
     $('inkColor').value = DEFAULTS.ink; $('paperColor').value = DEFAULTS.paper;
     $('animFrames').value = DEFAULTS.animFrames; $('animFps').value = DEFAULTS.animFps;
+    $('outputSize').value = 'native'; $('fitMode').value = 'contain';
+    $('outW').value = 1920; $('outH').value = 1080;
+    setFill('#000000');
     resetTransform();
     syncOutputs(); updateVisibility(); refreshGifInfo();
   }
@@ -1083,6 +1204,13 @@
     if (hexOk(s.ink)) $('inkColor').value = s.ink;
     if (hexOk(s.paper)) $('paperColor').value = s.paper;
     if ([1, 2, 4, 8].indexOf(+s.exportScale) >= 0) $('exportScale').value = String(+s.exportScale);
+    if (s.outputSize && Array.prototype.some.call($('outputSize').options, (o) => o.value === s.outputSize)) {
+      $('outputSize').value = s.outputSize;
+    }
+    if (isFinite(+s.outW) && +s.outW >= 1) $('outW').value = Math.min(8192, Math.round(+s.outW));
+    if (isFinite(+s.outH) && +s.outH >= 1) $('outH').value = Math.min(8192, Math.round(+s.outH));
+    if (['contain', 'cover', 'stretch'].indexOf(s.fitMode) >= 0) $('fitMode').value = s.fitMode;
+    if (hexOk(s.fillColor)) setFill(s.fillColor);
     if (Array.isArray(p.customColors)) {
       const cc = p.customColors.filter(hexOk);
       if (cc.length >= 2) state.customColors = cc;
@@ -1230,6 +1358,7 @@
     // drag the preview to reframe when zoomed past 1x
     let panDrag = null;
     canvas.addEventListener('pointerdown', (e) => {
+      if (eyedropping) { e.preventDefault(); pickColorAt(e); return; }
       if (!state.image || state.transform.zoom <= 1.001) return;
       panDrag = { x: e.clientX, y: e.clientY, ox: state.transform.ox, oy: state.transform.oy };
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
@@ -1282,6 +1411,19 @@
     $('copyBtn').addEventListener('click', copyToClipboard);
     $('exportGifBtn').addEventListener('click', exportGif);
     $('exportVideoBtn').addEventListener('click', exportVideo);
+
+    // output fill colour: keep the picker and the hex box in sync
+    $('fillColor').addEventListener('input', () => {
+      $('fillHex').value = $('fillColor').value.toUpperCase();
+      schedule();
+    });
+    $('fillHex').addEventListener('input', () => {
+      let v = $('fillHex').value.trim();
+      if (v && v[0] !== '#') v = '#' + v;
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) { $('fillColor').value = v.toLowerCase(); schedule(); }
+    });
+    $('eyedropBtn').addEventListener('click', () => (eyedropping ? stopEyedrop() : startEyedrop()));
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && eyedropping) stopEyedrop(); });
 
     // video transport
     $('videoPlayBtn').addEventListener('click', () => {
@@ -1371,7 +1513,7 @@
     $('resetBtn').addEventListener('click', () => { applyDefaults(); schedule(); });
     $('randomBtn').addEventListener('click', randomize);
     $('showOriginal').addEventListener('change', schedule);
-    window.addEventListener('resize', () => { if (state.lastOutput) fitCanvas(state.lastOutput.w, state.lastOutput.h); });
+    window.addEventListener('resize', () => { if (state.lastOutput) fitCanvas(canvas.width, canvas.height); });
   }
 
   document.addEventListener('DOMContentLoaded', init);

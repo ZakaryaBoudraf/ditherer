@@ -73,6 +73,14 @@ number box** — type an exact value or drag the slider.
 **Export** — download PNG at 1× / 2× / 4× / 8× (crisp nearest-neighbour upscale),
 or copy straight to the clipboard. Live preview updates as you drag sliders.
 
+**Output size & fill** — render to a fixed standard size (720p, 1080p, 1440p,
+4K, 1080² square, 1080×1920 vertical, 4:5, social card, 4:3, or any custom
+W×H) instead of native pixels. When the image doesn't match the target aspect,
+choose **Contain** (letterbox/pillarbox padded with a fill color), **Cover**
+(crop to fill) or **Stretch**. The fill color takes a hex code or can be
+**eyedropped straight from the picture** — click ⌖ Pick, then click anywhere on
+the preview. Output size applies to PNG, batch, GIF and video exports alike.
+
 **Animated GIF** — load an animated GIF and every frame is re-dithered with your
 current settings, then exported as a new looping GIF (original frame delays
 preserved). Or turn a *still* image into an animated GIF: the "shimmer" generator

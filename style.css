@@ -143,6 +143,19 @@ input[type="text"]::placeholder { color: var(--muted); }
 .hint-inline { color: var(--muted); font-weight: 400; font-size: 11px; }
 .btn.rec { border-color: var(--danger); color: var(--danger); }
 
+/* output framing: custom size + fill colour */
+.size-row, .fill-row { align-items: center; }
+.size-input { flex: 1; min-width: 0; text-align: center; }
+.fill-row input[type="color"] {
+  flex: 0 0 auto; width: 34px; height: 32px; padding: 2px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--panel-2); cursor: pointer;
+}
+.hex-input { flex: 1; min-width: 0; text-align: left; text-transform: uppercase; }
+.fill-row .btn { flex: 0 0 auto; padding: 7px 10px; }
+canvas.eyedrop { cursor: crosshair; }
+.btn.active { border-color: var(--accent); color: var(--accent); }
+
 /* buttons */
 .btn {
   flex: 1; cursor: pointer; border: 1px solid var(--line);

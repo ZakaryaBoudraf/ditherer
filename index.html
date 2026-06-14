@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ditherer — local</title>
-  <link rel="stylesheet" href="style.css?v=7" />
+  <link rel="stylesheet" href="style.css?v=8" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%230b0b0d'/><g fill='%2300e08a'><rect x='1' y='1' width='2' height='2'/><rect x='5' y='1' width='2' height='2'/><rect x='9' y='1' width='2' height='2'/><rect x='13' y='1' width='2' height='2'/><rect x='3' y='3' width='2' height='2'/><rect x='7' y='3' width='2' height='2'/><rect x='11' y='3' width='2' height='2'/><rect x='1' y='5' width='2' height='2'/><rect x='9' y='5' width='2' height='2'/><rect x='5' y='7' width='2' height='2'/><rect x='13' y='7' width='2' height='2'/></g></svg>" />
 </head>
 <body>
@@ -298,6 +298,36 @@
       <section class="panel">
         <h2>Export</h2>
         <div class="control">
+          <label for="outputSize">Output size</label>
+          <select id="outputSize">
+            <option value="native">Original (dither × scale)</option>
+            <optgroup label="Landscape 16:9">
+              <option value="1280x720">1280 × 720 — HD 720p</option>
+              <option value="1920x1080">1920 × 1080 — Full HD 1080p</option>
+              <option value="2560x1440">2560 × 1440 — QHD 1440p</option>
+              <option value="3840x2160">3840 × 2160 — 4K UHD</option>
+            </optgroup>
+            <optgroup label="Square / portrait">
+              <option value="1080x1080">1080 × 1080 — square</option>
+              <option value="1080x1350">1080 × 1350 — 4:5 portrait</option>
+              <option value="1080x1920">1080 × 1920 — 9:16 vertical</option>
+            </optgroup>
+            <optgroup label="Other">
+              <option value="1200x630">1200 × 630 — social card</option>
+              <option value="800x600">800 × 600 — 4:3</option>
+              <option value="custom">Custom…</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="control" id="customSizeWrap" hidden>
+          <label>Custom dimensions (px)</label>
+          <div class="row size-row">
+            <input type="number" id="outW" class="num size-input" min="1" max="8192" step="1" value="1920" />
+            <span class="hint-inline">×</span>
+            <input type="number" id="outH" class="num size-input" min="1" max="8192" step="1" value="1080" />
+          </div>
+        </div>
+        <div class="control" id="scaleWrap">
           <label for="exportScale">Output scale</label>
           <select id="exportScale">
             <option value="1">1× (native pixels)</option>
@@ -305,6 +335,22 @@
             <option value="4">4×</option>
             <option value="8">8×</option>
           </select>
+        </div>
+        <div class="control" id="fitWrap" hidden>
+          <label for="fitMode">Fit</label>
+          <select id="fitMode">
+            <option value="contain">Contain — pad with color</option>
+            <option value="cover">Cover — crop to fill</option>
+            <option value="stretch">Stretch — distort to fit</option>
+          </select>
+        </div>
+        <div class="control" id="fillWrap" hidden>
+          <label for="fillHex">Fill color</label>
+          <div class="row fill-row">
+            <input type="color" id="fillColor" value="#000000" title="Fill color" />
+            <input type="text" id="fillHex" class="num hex-input" value="#000000" maxlength="7" spellcheck="false" />
+            <button id="eyedropBtn" class="btn ghost" title="Pick a color from the image">⌖ Pick</button>
+          </div>
         </div>
         <div class="row">
           <button id="downloadBtn" class="btn primary" disabled>Download PNG</button>
@@ -336,8 +382,8 @@
     </main>
   </div>
 
-  <script src="dither.js?v=7"></script>
-  <script src="codec.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="dither.js?v=8"></script>
+  <script src="codec.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
