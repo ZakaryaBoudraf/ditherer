@@ -365,31 +365,38 @@
   }
 
   /* ---------- public dither dispatcher ---------------------------------- */
-  // Modulation: beaded contour lines whose vertical position is warped by image
-  // brightness — a carrier-wave dither. spacing = line/dot pitch (px),
-  // amount = how hard brightness bends the lines, phase animates the flow.
+  // Modulation: topographic iso-contour lines of the (blurred) brightness
+  // field, domain-warped so they flow and bunch, then beaded into dots with an
+  // ordered stipple. spacing = contour density, amount = warp/turbulence,
+  // phase animates the flow. Looks best in duotone + Glow.
   function modulationDither(src, od, w, h, palette, amount, spacingPx, phase) {
-    const spacing = Math.max(2, spacingPx | 0);
-    const inv = 1 / spacing;                       // line periods per pixel (vertical)
-    const warpLines = (amount / 100) * 5;          // brightness can shift up to ~5 lines
-    const TWO_PI = Math.PI * 2;
-    const beadInv = TWO_PI / spacing;              // one bead per pitch along x
-    const ph = phase || 0;
+    const n = w * h;
+    const Lf = new Float32Array(n);
+    for (let i = 0; i < n; i++) Lf[i] = lum(src[i * 4], src[i * 4 + 1], src[i * 4 + 2]) / 255;
+    const sp = Math.max(3, spacingPx | 0);
+    boxBlur(Lf, new Float32Array(n), w, h, Math.max(1, Math.round(sp / 2)));
+    const levels = Math.max(5, Math.round(75 / sp));   // contour bands (line density)
+    const warpBands = (amount / 100) * 1.7;            // gentle flow (band units)
+    const thin = 5 + sp;                               // higher → thinner lines
+    const bayer = MATRICES.bayer8, bn = bayer.length;
+    const ph = (phase || 0) * 0.06;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const L = lum(src[i], src[i + 1], src[i + 2]) / 255;
-        const coord = (y + ph) * inv + L * warpLines;
-        const f = coord - Math.floor(coord);        // 0..1 across one line period
-        let ridge = 1 - Math.abs(2 * f - 1);        // triangle: peak at line centre
-        ridge = ridge * ridge * (3 - 2 * ridge);    // smoothstep
-        ridge = ridge * ridge;                      // thin the ridge
-        let bead = 0.5 + 0.5 * Math.sin(x * beadInv + coord * TWO_PI + ph * 0.25);
-        bead = bead * bead;                         // break the line into dots
-        const inten = ridge * bead * (0.12 + 0.88 * L);
-        const g = clamp(inten * 320);               // boost so ridges hit the bright colour
+        const idx = y * w + x;
+        const L = Lf[idx];
+        // wobble so the iso-lines flow and pile up (in band units, not ×levels)
+        const wob = Math.sin(x * 0.03 + y * 0.012 + ph) * 0.6
+                  + Math.sin(y * 0.05 - x * 0.02 - ph * 0.7) * 0.4;
+        const v = L * levels + warpBands * wob;
+        const f = v - Math.floor(v);
+        const dEdge = f < 0.5 ? f : 1 - f;             // 0 exactly on a contour line
+        const ridge = Math.pow(1 - 2 * dEdge, thin);   // sharp thin ridge at the line
+        const value = ridge * (0.12 + 0.88 * L);       // dark → sparse, bright → solid
+        const lit = value > bayer[y % bn][x % bn] * 0.7;  // light stipple → beaded curves
+        const g = lit ? clamp(110 + L * 145) : 0;
+        const o = idx * 4;
         const nc = nearest(palette, g, g, g);
-        od[i] = nc[0]; od[i + 1] = nc[1]; od[i + 2] = nc[2]; od[i + 3] = 255;
+        od[o] = nc[0]; od[o + 1] = nc[1]; od[o + 2] = nc[2]; od[o + 3] = 255;
       }
     }
   }
