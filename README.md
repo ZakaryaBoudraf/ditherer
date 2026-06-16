@@ -50,7 +50,9 @@ app and every setting snaps into place.
 - *Error diffusion:* Floyd–Steinberg, False Floyd–Steinberg, Jarvis–Judice–Ninke,
   Stucki, Atkinson, Burkes, Sierra (3-row), Two-Row Sierra, Sierra Lite, Stevenson–Arce
 - *Ordered:* Bayer 2×2 / 4×4 / 8×8, Clustered-dot 4×4 / 8×8
-- *Pattern:* Halftone dots, Random noise, Threshold (no dither)
+- *Pattern:* Halftone dots, Modulation (carrier-wave dither — beaded contour
+  lines warped by image brightness, for flowing topographic/oscilloscope
+  looks; pair with Glow), Random noise, Threshold (no dither)
 
 **Color**
 - Black & White (1-bit) with custom ink/paper colors

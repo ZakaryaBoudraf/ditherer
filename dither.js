@@ -119,6 +119,7 @@
     clustered8: { label: 'Clustered 8×8', group: 'Ordered', type: 'ordered', matrix: MATRICES.clustered8 },
 
     halftone: { label: 'Halftone dots', group: 'Pattern', type: 'halftone' },
+    modulation: { label: 'Modulation (wave)', group: 'Pattern', type: 'modulation' },
     random: { label: 'Random noise', group: 'Pattern', type: 'random' },
     threshold: { label: 'Threshold (no dither)', group: 'Pattern', type: 'threshold' },
   };
@@ -364,6 +365,35 @@
   }
 
   /* ---------- public dither dispatcher ---------------------------------- */
+  // Modulation: beaded contour lines whose vertical position is warped by image
+  // brightness — a carrier-wave dither. spacing = line/dot pitch (px),
+  // amount = how hard brightness bends the lines, phase animates the flow.
+  function modulationDither(src, od, w, h, palette, amount, spacingPx, phase) {
+    const spacing = Math.max(2, spacingPx | 0);
+    const inv = 1 / spacing;                       // line periods per pixel (vertical)
+    const warpLines = (amount / 100) * 5;          // brightness can shift up to ~5 lines
+    const TWO_PI = Math.PI * 2;
+    const beadInv = TWO_PI / spacing;              // one bead per pitch along x
+    const ph = phase || 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const L = lum(src[i], src[i + 1], src[i + 2]) / 255;
+        const coord = (y + ph) * inv + L * warpLines;
+        const f = coord - Math.floor(coord);        // 0..1 across one line period
+        let ridge = 1 - Math.abs(2 * f - 1);        // triangle: peak at line centre
+        ridge = ridge * ridge * (3 - 2 * ridge);    // smoothstep
+        ridge = ridge * ridge;                      // thin the ridge
+        let bead = 0.5 + 0.5 * Math.sin(x * beadInv + coord * TWO_PI + ph * 0.25);
+        bead = bead * bead;                         // break the line into dots
+        const inten = ridge * bead * (0.12 + 0.88 * L);
+        const g = clamp(inten * 320);               // boost so ridges hit the bright colour
+        const nc = nearest(palette, g, g, g);
+        od[i] = nc[0]; od[i + 1] = nc[1]; od[i + 2] = nc[2]; od[i + 3] = 255;
+      }
+    }
+  }
+
   function dither(imageData, palette, s) {
     const w = imageData.width, h = imageData.height;
     const src = imageData.data;
@@ -380,6 +410,8 @@
       randomDither(src, od, w, h, palette, s.step * (s.amount / 100));
     } else if (algo.type === 'halftone') {
       halftoneDither(src, od, w, h, palette, s.halftoneSize);
+    } else if (algo.type === 'modulation') {
+      modulationDither(src, od, w, h, palette, s.amount, s.halftoneSize, s.phase | 0);
     } else {
       thresholdDither(src, od, palette);
     }

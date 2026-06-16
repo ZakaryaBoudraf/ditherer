@@ -1041,9 +1041,15 @@
   function updateVisibility() {
     const s = readSettings();
     const algo = Dither.ALGORITHMS[s.algorithm];
-    $('amountWrap').hidden = !(algo.type === 'error' || algo.type === 'ordered' || algo.type === 'random');
-    $('halftoneWrap').hidden = algo.type !== 'halftone';
+    const mod = algo.type === 'modulation';
+    $('amountWrap').hidden = !(algo.type === 'error' || algo.type === 'ordered' || algo.type === 'random' || mod);
+    $('halftoneWrap').hidden = !(algo.type === 'halftone' || mod);
     $('serpentineWrap').hidden = algo.type !== 'error';
+    // relabel the shared controls for modulation
+    const amtLabel = document.querySelector('label[for="amount"]');
+    if (amtLabel) amtLabel.firstChild.nodeValue = mod ? 'Warp depth ' : 'Dither amount ';
+    const sizeLabel = document.querySelector('label[for="halftoneSize"]');
+    if (sizeLabel) sizeLabel.firstChild.nodeValue = mod ? 'Line spacing ' : 'Dot size ';
     $('levelsWrap').hidden = s.mode !== 'grayscale';
     $('duoWrap').hidden = s.mode === 'color';
     $('colorWrap').hidden = s.mode !== 'color';
