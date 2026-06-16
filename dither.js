@@ -386,9 +386,73 @@
     return out;
   }
 
+  /* ---------- O(n) separable box blur (for glow) ------------------------ */
+  function blurH(src, dst, w, h, r) {
+    const norm = 1 / (2 * r + 1);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      let acc = 0;
+      for (let k = -r; k <= r; k++) acc += src[row + Math.min(w - 1, Math.max(0, k))];
+      for (let x = 0; x < w; x++) {
+        dst[row + x] = acc * norm;
+        acc += src[row + Math.min(w - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+      }
+    }
+  }
+  function blurV(src, dst, w, h, r) {
+    const norm = 1 / (2 * r + 1);
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let k = -r; k <= r; k++) acc += src[Math.min(h - 1, Math.max(0, k)) * w + x];
+      for (let y = 0; y < h; y++) {
+        dst[y * w + x] = acc * norm;
+        acc += src[Math.min(h - 1, y + r + 1) * w + x] - src[Math.max(0, y - r) * w + x];
+      }
+    }
+  }
+  function boxBlur(buf, scratch, w, h, r) {
+    blurH(buf, scratch, w, h, r);
+    blurV(scratch, buf, w, h, r);
+  }
+  const screen = (a, b) => 255 - (255 - a) * (255 - b) / 255;
+
   /* ---------- post-dither effects --------------------------------------- */
   function applyPostEffects(id, s) {
     const w = id.width, h = id.height, d = id.data;
+
+    // --- signal: analog wave warp + horizontal light-trail bleed ---------
+    if (s.signal > 0) {
+      const amt = s.signal / 100;
+      const amp = amt * w * 0.04;
+      if (amp >= 0.5) {                          // (A) wobble each row sideways
+        const src = d.slice();
+        const f1 = (Math.PI * 2) * (2 + amt * 4) / h;
+        const f2 = (Math.PI * 2) * 0.7 / h;
+        for (let y = 0; y < h; y++) {
+          const dx = Math.round((Math.sin(y * f1) * 0.7 + Math.sin(y * f2 + 1.3) * 0.3) * amp);
+          for (let x = 0; x < w; x++) {
+            let sx = x - dx; if (sx < 0) sx = 0; else if (sx >= w) sx = w - 1;
+            const o = (y * w + x) * 4, p = (y * w + sx) * 4;
+            d[o] = src[p]; d[o + 1] = src[p + 1]; d[o + 2] = src[p + 2];
+          }
+        }
+      }
+      const decay = 0.78 + amt * 0.2;            // (B) bright pixels trail rightward
+      const m = amt * 0.85;
+      for (let y = 0; y < h; y++) {
+        let tr = 0, tg = 0, tb = 0;
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          tr *= decay; tg *= decay; tb *= decay;
+          if (d[i] > tr) tr = d[i];
+          if (d[i + 1] > tg) tg = d[i + 1];
+          if (d[i + 2] > tb) tb = d[i + 2];
+          d[i] = screen(d[i], tr * m);
+          d[i + 1] = screen(d[i + 1], tg * m);
+          d[i + 2] = screen(d[i + 2], tb * m);
+        }
+      }
+    }
 
     if (s.chroma > 0) {
       const off = Math.max(1, Math.round(s.chroma));
@@ -403,6 +467,33 @@
         }
       }
     }
+    // --- glow / bloom: soft halo around bright pixels --------------------
+    if (s.glow > 0) {
+      const amt = s.glow / 100;
+      const n = w * h;
+      const br = new Float32Array(n), bg = new Float32Array(n), bb = new Float32Array(n);
+      const scratch = new Float32Array(n);
+      const thr = 110;                           // only bright pixels bloom
+      for (let i = 0; i < n; i++) {
+        const o = i * 4, L = lum(d[o], d[o + 1], d[o + 2]);
+        const k = L > thr ? (L - thr) / (255 - thr) : 0;
+        br[i] = d[o] * k; bg[i] = d[o + 1] * k; bb[i] = d[o + 2] * k;
+      }
+      const radius = Math.max(1, Math.round(amt * Math.max(w, h) * 0.04));
+      for (let pass = 0; pass < 2; pass++) {     // two box passes ≈ Gaussian
+        boxBlur(br, scratch, w, h, radius);
+        boxBlur(bg, scratch, w, h, radius);
+        boxBlur(bb, scratch, w, h, radius);
+      }
+      const gain = 0.6 + amt * 1.9;
+      for (let i = 0; i < n; i++) {
+        const o = i * 4;
+        d[o] = screen(d[o], Math.min(255, br[i] * gain));
+        d[o + 1] = screen(d[o + 1], Math.min(255, bg[i] * gain));
+        d[o + 2] = screen(d[o + 2], Math.min(255, bb[i] * gain));
+      }
+    }
+
     if (s.noise > 0) {
       const amt = s.noise * 2;
       for (let i = 0; i < d.length; i += 4) {

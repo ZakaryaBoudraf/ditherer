@@ -68,7 +68,9 @@ saturation, hue shift, invert.
 spread), serpentine scan, halftone dot size. Every dial has an **editable
 number box** — type an exact value or drag the slider.
 
-**Post effects** — scanlines, noise, chromatic aberration.
+**Post effects** — glow/bloom (soft halo around bright pixels), signal warp
+(analog wave wobble with glowing horizontal light-trail bleed, for that
+neon-broadcast look), scanlines, noise, and chromatic aberration.
 
 **Export** — download PNG at 1× / 2× / 4× / 8× (crisp nearest-neighbour upscale),
 or copy straight to the clipboard. Live preview updates as you drag sliders.

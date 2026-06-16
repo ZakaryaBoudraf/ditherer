@@ -92,7 +92,7 @@
     ink: '#0b0b0d', paper: '#f2f2f2', animFrames: 12, animFps: 12,
   };
   const SLIDERS = ['resolution', 'brightness', 'contrast', 'midtones', 'saturation', 'hue',
-                   'amount', 'halftoneSize', 'levels', 'extractCount', 'scanlines', 'noise', 'chroma',
+                   'amount', 'halftoneSize', 'levels', 'extractCount', 'glow', 'signal', 'scanlines', 'noise', 'chroma',
                    'animFrames', 'animFps'];
   const ALL_DIALS = SLIDERS.concat(['straighten', 'cropZoom']);
 
@@ -121,6 +121,8 @@
       palette: $('palette').value,
       ink: $('inkColor').value,
       paper: $('paperColor').value,
+      glow: +$('glow').value,
+      signal: +$('signal').value,
       scanlines: +$('scanlines').value,
       noise: +$('noise').value,
       chroma: +$('chroma').value,
@@ -1126,7 +1128,7 @@
   /* ---------- reset / randomize ----------------------------------------- */
   function applyDefaults() {
     $('resolution').value = DEFAULTS.resolution;
-    ['brightness', 'contrast', 'midtones', 'saturation', 'hue', 'scanlines', 'noise', 'chroma'].forEach((id) => { $(id).value = 0; });
+    ['brightness', 'contrast', 'midtones', 'saturation', 'hue', 'glow', 'signal', 'scanlines', 'noise', 'chroma'].forEach((id) => { $(id).value = 0; });
     $('invert').checked = false;
     $('algorithm').value = DEFAULTS.algorithm; $('amount').value = 100;
     $('halftoneSize').value = 6; $('serpentine').checked = true;
@@ -1191,7 +1193,7 @@
     const s = p.settings;
     const hexOk = (h) => typeof h === 'string' && /^#[0-9a-fA-F]{6}$/.test(h);
     ['resolution', 'brightness', 'contrast', 'midtones', 'saturation', 'hue',
-     'amount', 'halftoneSize', 'levels', 'scanlines', 'noise', 'chroma'].forEach((id) => {
+     'amount', 'halftoneSize', 'levels', 'glow', 'signal', 'scanlines', 'noise', 'chroma'].forEach((id) => {
       if (s[id] != null && isFinite(+s[id])) $(id).value = +s[id];
     });
     if (p.animFrames != null && isFinite(+p.animFrames)) $('animFrames').value = +p.animFrames;
